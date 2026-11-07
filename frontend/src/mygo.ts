@@ -193,6 +193,29 @@ export interface Settings {
   theme: Theme;
   /** KeepDays is how many days messages are kept here; 0 keeps them forever. */
   keepDays: number;
+  /**
+   * SoundNormal and SoundHigh are the sounds a notification plays: the path
+   * of a WAV file, an "ms-winsoundevent:" URI naming one of the system's
+   * sounds, or an http(s) URL. "" plays the system's notification sound.
+   */
+  soundNormal: string;
+  soundHigh: string;
+  /**
+   * SoundLowPriority plays SoundNormal for the messages of priority 1-3,
+   * which otherwise notify without a sound.
+   */
+  soundLowPriority: boolean;
+}
+
+/**
+ * Sound is the notification sound playing now: what it is, and how much of it
+ * is left once the page reckons with Started.
+ */
+export interface Sound {
+  name: string;
+  file: string;
+  durationMs: number;
+  startedMs: number;
 }
 
 /** State is everything the page shows besides messages. */
@@ -211,6 +234,11 @@ export interface State {
   version: string;
   dataDir: string;
   openAtLogin: boolean;
+  /**
+   * Sound is the notification sound playing now, if any. The window that
+   * shows it follows this field.
+   */
+  sound: Sound | null;
 }
 
 /** Theme is a light or dark appearance, or "" for the system's. */
@@ -313,6 +341,20 @@ export const Desktop = {
     return call("Desktop.PickCA");
   },
   /**
+   * PickSound asks for a WAV file to play for notifications. It returns "" when
+   * the user canceled.
+   */
+  pickSound(): Promise<string> {
+    return call("Desktop.PickSound");
+  },
+  /**
+   * PreviewSound shows a sample notification that plays this sound, so that the
+   * user hears one before saving it. An empty sound signs the system's.
+   */
+  previewSound(sound: string): Promise<void> {
+    return call("Desktop.PreviewSound", sound);
+  },
+  /**
    * ReadText returns the text on the clipboard, empty when there is none. The
    * page pastes it into its fields: a webview keeps scripts from reading the
    * clipboard, or asks the user first.
@@ -358,6 +400,10 @@ export const Desktop = {
   /** State returns the servers, their apps, the unread counts and the settings. */
   state(): Promise<State> {
     return call("Desktop.State");
+  },
+  /** StopSound stops the notification sound playing now. */
+  stopSound(): Promise<void> {
+    return call("Desktop.StopSound");
   },
   /** SystemAppearance returns the system's accent color and the window's material. */
   systemAppearance(): Promise<Appearance> {

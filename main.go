@@ -85,6 +85,7 @@ func main() {
 		OpenAtLogin:     mygo.App.OpenAtLogin,
 		SetOpenAtLogin:  mygo.App.SetOpenAtLogin,
 		PickCA:          d.pickCA,
+		PickSound:       d.pickSound,
 		OpenURL:         func(u string) { mygo.Shell.OpenExternal(u) },
 		CopyText:        mygo.Clipboard.WriteText,
 		ReadText:        mygo.Clipboard.ReadText,
@@ -151,6 +152,13 @@ func (c demoController) Test() error {
 	})
 }
 
+func (c demoController) PreviewSound(sound string) error {
+	return c.notifier.Show(notify.Notification{
+		ID: "sound-preview", Title: appName, Body: i18n.T("This is the sound of a notification."), AppName: appName,
+		Level: notify.LevelNormal, Sound: sound,
+	})
+}
+
 func (c demoController) HandleActivation(id string) app.Activation {
 	id, action := notify.SplitActivation(id)
 	serverID, appID, msgID, kind := notify.ParseID(id)
@@ -187,6 +195,7 @@ type desktop struct {
 
 	mu         sync.Mutex
 	win        *mygo.Window
+	soundWin   *mygo.Window
 	closing    atomic.Bool
 	trayDirty  atomic.Bool
 	trayState  string
@@ -264,6 +273,8 @@ func (d *desktop) start() {
 	}
 
 	d.notifier.OnActivate(d.activated)
+	// The window that shows the sound of a notification follows what plays.
+	notify.OnSoundChange(d.onChange)
 	mygo.Power.OnResume(d.ctrl.KickAll)
 	mygo.Power.OnUnlockScreen(d.ctrl.KickAll)
 	d.makeTray()
@@ -275,6 +286,8 @@ func (d *desktop) start() {
 
 func (d *desktop) close() {
 	d.closing.Store(true)
+	// A sound plays in this process, so it goes with it.
+	notify.StopSound()
 	d.api.Close()
 	if d.ctrl != nil {
 		d.ctrl.Close()
@@ -296,7 +309,77 @@ func (d *desktop) onChange() {
 	}
 	d.api.Changed()
 	go d.requestTray()
+	d.syncSoundWindow()
 }
+
+// soundWinWidth and soundWinHeight are the size of the window that shows the
+// sound of a notification: one line of text and a button.
+const (
+	soundWinWidth  = 348
+	soundWinHeight = 96
+)
+
+// syncSoundWindow shows the window of the sound while one plays, and hides it
+// when none does. The window is made once and kept, so a burst of
+// notifications does not create one window per sound.
+func (d *desktop) syncSoundWindow() {
+	if d.closing.Load() {
+		return
+	}
+	playing := notify.CurrentSound() != nil
+	mygo.RunOnMain(func() {
+		if !playing {
+			if w := d.soundWindow(); w != nil && !w.IsDestroyed() {
+				w.Hide()
+			}
+			return
+		}
+		d.showSoundWindow()
+	})
+}
+
+func (d *desktop) soundWindow() *mygo.Window {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.soundWin != nil && d.soundWin.IsDestroyed() {
+		d.soundWin = nil
+	}
+	return d.soundWin
+}
+
+// showSoundWindow shows the window of the sound, creating it the first time:
+// frameless and above other windows, in the corner of the work area, out of the
+// taskbar. Its page is the app's own, at the route that draws only the player.
+func (d *desktop) showSoundWindow() {
+	if w := d.soundWindow(); w != nil {
+		w.Show()
+		return
+	}
+	area := mygo.Screen.PrimaryDisplay().WorkArea
+	w := mygo.NewWindow(mygo.WindowOptions{
+		Title: appName, Width: soundWinWidth, Height: soundWinHeight,
+		X: area.X + area.Width - soundWinWidth - 24,
+		Y: area.Y + area.Height - soundWinHeight - 24,
+		Frameless: true, AlwaysOnTop: true, SkipTaskbar: true,
+		DisableResize: true, DisableMinimize: true, DisableMaximize: true,
+		Hidden: true, URL: soundRoute,
+		BackgroundColor: "light-dark(#f7f7f7, #222222)",
+	})
+	w.OnReadyToShow(func() { w.Show() })
+	w.OnClosed(func() {
+		d.mu.Lock()
+		if d.soundWin == w {
+			d.soundWin = nil
+		}
+		d.mu.Unlock()
+	})
+	d.mu.Lock()
+	d.soundWin = w
+	d.mu.Unlock()
+}
+
+// soundRoute is the page that draws the player of a notification sound.
+const soundRoute = "/?player"
 
 // applyTheme gives the window, its title bar and the page the appearance the
 // settings choose. It runs on the main thread, with the tray.
@@ -507,6 +590,18 @@ func (d *desktop) pickCA(context.Context) (string, []byte, error) {
 		return "", nil, err
 	}
 	return filepath.Base(paths[0]), data, nil
+}
+
+// pickSound asks for the WAV file a notification plays, and returns its path.
+func (d *desktop) pickSound(context.Context) (string, error) {
+	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+		Parent: d.window(), Title: i18n.T("Choose a sound"),
+		Filters: []mygo.FileFilter{{Name: i18n.T("WAV audio"), Extensions: []string{"wav"}}, {Name: i18n.T("All files"), Extensions: []string{"*"}}},
+	})
+	if err != nil || len(paths) == 0 {
+		return "", err
+	}
+	return paths[0], nil
 }
 
 func (d *desktop) makeTray() {

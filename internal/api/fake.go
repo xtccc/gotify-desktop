@@ -33,6 +33,11 @@ type FakeBackend struct {
 	Added    []app.ServerInput
 	Deleted  []uint
 	Tested   atomic.Int32
+	// Previewed counts PreviewSound calls; PreviewedSound is the last sound.
+	Previewed      atomic.Int32
+	PreviewedSound string
+	// Stopped counts StopSound calls.
+	Stopped atomic.Int32
 	// Images are the images FetchImage serves, by URL.
 	Images map[string][]byte
 	snap   atomic.Pointer[app.Snapshot]
@@ -307,6 +312,21 @@ func (f *FakeBackend) MoveApp(ctx context.Context, serverID int64, appID, before
 }
 
 func (f *FakeBackend) Test() error { f.Tested.Add(1); return nil }
+
+// PreviewSound remembers the sound of the last preview.
+func (f *FakeBackend) PreviewSound(sound string) error {
+	f.mu.Lock()
+	f.PreviewedSound = sound
+	f.mu.Unlock()
+	f.Previewed.Add(1)
+	return nil
+}
+
+// StopSound counts the sounds the page asked to stop.
+func (f *FakeBackend) StopSound() error {
+	f.Stopped.Add(1)
+	return nil
+}
 
 func (f *FakeBackend) FetchImage(ctx context.Context, url string) ([]byte, error) {
 	f.mu.Lock()

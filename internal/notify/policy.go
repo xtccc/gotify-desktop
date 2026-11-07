@@ -39,6 +39,14 @@ type Settings struct {
 	BurstWindow        time.Duration
 	BurstMax           int
 	CatchUpSummaryOver int
+	// SoundNormal and SoundHigh are the sounds a notification plays: the path
+	// of a WAV file, an "ms-winsoundevent:" URI naming one of the system's
+	// sounds, or an http(s) URL. "" plays the system's notification sound.
+	SoundNormal string
+	SoundHigh   string
+	// SoundLowPriority plays SoundNormal for the messages of priority 1-3,
+	// which otherwise notify without a sound.
+	SoundLowPriority bool
 }
 
 func DefaultSettings() Settings {

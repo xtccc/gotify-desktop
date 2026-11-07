@@ -163,6 +163,7 @@ func New(opts Options) (*App, error) {
 	a.metadataDirty.Store(true)
 	s := a.loadSettings()
 	a.settings.Store(&s)
+	notify.SetSounds(s.SoundNormal, s.SoundHigh, s.SoundLowPriority)
 	a.disp = notify.NewDispatcher(opts.Notifier, st, a.Settings, opts.CacheDir, nil)
 	servers, err := st.Servers()
 	if err != nil {
@@ -951,6 +952,7 @@ func (a *App) SetSettings(s notify.Settings) error {
 		return err
 	}
 	old := a.settings.Swap(&s)
+	notify.SetSounds(s.SoundNormal, s.SoundHigh, s.SoundLowPriority)
 	if s.KeepDays != old.KeepDays {
 		select {
 		case a.pruneWake <- struct{}{}:
@@ -1018,5 +1020,21 @@ func (a *App) FetchImage(ctx context.Context, url string) ([]byte, error) {
 func (a *App) Test() error {
 	return a.opts.Notifier.Show(notify.Notification{
 		ID: "test", Title: "Gotify Desktop", Body: i18n.T("Notifications work."), AppName: "Gotify Desktop", Level: notify.LevelNormal,
+	})
+}
+
+// StopSound stops the notification sound playing now: a sound can be long
+// enough that waiting it out is not what the user wants.
+func (a *App) StopSound() error {
+	notify.StopSound()
+	return nil
+}
+
+// PreviewSound shows a sample notification that plays this sound, so that the
+// user hears one before saving it.
+func (a *App) PreviewSound(sound string) error {
+	return a.opts.Notifier.Show(notify.Notification{
+		ID: "sound-preview", Title: "Gotify Desktop", Body: i18n.T("This is the sound of a notification."), AppName: "Gotify Desktop",
+		Level: notify.LevelNormal, Sound: sound,
 	})
 }

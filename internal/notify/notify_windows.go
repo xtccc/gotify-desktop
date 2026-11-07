@@ -108,5 +108,8 @@ func (n *winNotifier) Show(nn Notification) error {
 	if err := n.run(func() error { return showTaggedToast(n.appID, nn) }); err != nil {
 		return fmt.Errorf("notify: %w", err)
 	}
+	// Windows plays a toast's own audio only for packaged apps, so a WAV the
+	// settings name is played here, alongside the toast it belongs to.
+	playSoundFile(soundPlanFor(nn).File, nn.ID)
 	return nil
 }

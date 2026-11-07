@@ -46,6 +46,12 @@ type Backend interface {
 	// MoveApp moves an app before another, or last when beforeID is 0.
 	MoveApp(ctx context.Context, serverID int64, appID, beforeID uint) error
 	Test() error
+	// StopSound stops the notification sound playing now, so that a long one
+	// does not have to be waited out.
+	StopSound() error
+	// PreviewSound shows a sample notification that plays this sound, so the
+	// user can hear one that is not saved yet.
+	PreviewSound(sound string) error
 	// FetchImage downloads the image of a message, from a URL in its extras.
 	FetchImage(ctx context.Context, url string) ([]byte, error)
 }
@@ -58,6 +64,9 @@ type Platform struct {
 	// PickCA asks for a CA certificate file and returns its name and contents,
 	// or empty values when the user canceled.
 	PickCA   func(ctx context.Context) (name string, data []byte, err error)
+	// PickSound asks for a WAV file and returns its path, or "" when the user
+	// canceled.
+	PickSound func(ctx context.Context) (path string, err error)
 	OpenURL  func(url string)
 	CopyText func(text string)
 	// ReadText returns the text on the clipboard, for the page's Paste.
@@ -177,6 +186,18 @@ type State struct {
 	Version     string   `json:"version"`
 	DataDir     string   `json:"dataDir"`
 	OpenAtLogin bool     `json:"openAtLogin"`
+	// Sound is the notification sound playing now, if any. The window that
+	// shows it follows this field.
+	Sound *Sound `json:"sound"`
+}
+
+// Sound is the notification sound playing now: what it is, and how much of it
+// is left once the page reckons with Started.
+type Sound struct {
+	Name       string `json:"name"`
+	File       string `json:"file"`
+	DurationMS int64  `json:"durationMs"`
+	StartedMS  int64  `json:"startedMs"`
 }
 
 // Server is a Gotify server and its connection.
@@ -224,6 +245,14 @@ type Settings struct {
 	Theme Theme `json:"theme"`
 	// KeepDays is how many days messages are kept here; 0 keeps them forever.
 	KeepDays int `json:"keepDays"`
+	// SoundNormal and SoundHigh are the sounds a notification plays: the path
+	// of a WAV file, an "ms-winsoundevent:" URI naming one of the system's
+	// sounds, or an http(s) URL. "" plays the system's notification sound.
+	SoundNormal string `json:"soundNormal"`
+	SoundHigh   string `json:"soundHigh"`
+	// SoundLowPriority plays SoundNormal for the messages of priority 1-3,
+	// which otherwise notify without a sound.
+	SoundLowPriority bool `json:"soundLowPriority"`
 }
 
 // Theme is a light or dark appearance, or "" for the system's.
@@ -442,6 +471,10 @@ func (d *Desktop) State() State {
 	}
 	s.Settings = settingsOf(snap.Settings)
 	s.Language = Language(i18n.Resolve(snap.Settings.Language))
+	if cur := notify.CurrentSound(); cur != nil {
+		s.Sound = &Sound{Name: cur.Name, File: cur.File,
+			DurationMS: cur.Duration.Milliseconds(), StartedMS: cur.Started.UnixMilli()}
+	}
 	for _, sv := range snap.Servers {
 		out := Server{ID: sv.ID, Name: sv.Name, URL: sv.URL, Insecure: sv.Insecure, HasCA: sv.HasCA,
 			State: connState(sv.State), Error: sv.Err, Unread: sv.Unread, Apps: []App{}, AppsSortable: sv.AppsSortable}
@@ -473,7 +506,11 @@ func connState(s conn.State) ConnState {
 }
 
 func settingsOf(s notify.Settings) Settings {
-	out := Settings{DND: s.DND, DNDStart: s.DNDStart, DNDEnd: s.DNDEnd, HighBypassesDND: s.HighBypassesDND, Language: Language(s.Language), Theme: Theme(s.Theme), KeepDays: s.KeepDays}
+	out := Settings{
+		DND: s.DND, DNDStart: s.DNDStart, DNDEnd: s.DNDEnd, HighBypassesDND: s.HighBypassesDND,
+		Language: Language(s.Language), Theme: Theme(s.Theme), KeepDays: s.KeepDays,
+		SoundNormal: s.SoundNormal, SoundHigh: s.SoundHigh, SoundLowPriority: s.SoundLowPriority,
+	}
 	if !s.PausedUntil.IsZero() {
 		t := s.PausedUntil
 		out.PausedUntil = &t
@@ -754,6 +791,21 @@ func (d *Desktop) PickCA(ctx context.Context) (*CAFile, error) {
 	return &CAFile{Name: name, PEM: string(data)}, nil
 }
 
+// PickSound asks for a WAV file to play for notifications. It returns "" when
+// the user canceled.
+func (d *Desktop) PickSound(ctx context.Context) (string, error) {
+	if d.plat.PickSound == nil {
+		return "", errors.New(i18n.T("Choosing files is not available."))
+	}
+	return d.plat.PickSound(ctx)
+}
+
+// PreviewSound shows a sample notification that plays this sound, so that the
+// user hears one before saving it. An empty sound signs the system's.
+func (d *Desktop) PreviewSound(sound string) error {
+	return explain(d.be.PreviewSound(clampSound(sound)))
+}
+
 // SettingsEpoch returns a number for a page to number its settings writes
 // from: epoch<<20 plus a count of its writes. Every call returns a higher one
 // than before, above every write saved, so a page loaded later wins over one
@@ -797,6 +849,8 @@ func (d *Desktop) SetSettings(seq uint64, s Settings) error {
 		cur.Theme = ""
 	}
 	cur.KeepDays = min(max(s.KeepDays, 0), maxKeepDays)
+	cur.SoundNormal, cur.SoundHigh = clampSound(s.SoundNormal), clampSound(s.SoundHigh)
+	cur.SoundLowPriority = s.SoundLowPriority
 	cur.PausedUntil = time.Time{}
 	if s.PausedUntil != nil {
 		cur.PausedUntil = *s.PausedUntil
@@ -805,6 +859,17 @@ func (d *Desktop) SetSettings(seq uint64, s Settings) error {
 }
 
 func clampMinutes(m int) int { return min(max(m, 0), 24*60-1) }
+
+// maxSoundLength bounds a sound of the settings: a path or a URL, not a file.
+const maxSoundLength = 1024
+
+func clampSound(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) > maxSoundLength {
+		return s[:maxSoundLength]
+	}
+	return s
+}
 
 // maxKeepDays bounds Settings.KeepDays: ten years.
 const maxKeepDays = 3650
@@ -824,6 +889,9 @@ func (d *Desktop) SetOpenAtLogin(on bool) error {
 
 // TestNotification shows a sample notification.
 func (d *Desktop) TestNotification() error { return d.be.Test() }
+
+// StopSound stops the notification sound playing now.
+func (d *Desktop) StopSound() error { return explain(d.be.StopSound()) }
 
 // NotificationPermission reports whether the system shows the app's
 // notifications, which the user changes in the system's settings.

@@ -9,6 +9,7 @@ import { neutralTheme } from "@astryxdesign/theme-neutral/built";
 import { StrictMode, useEffect, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { SoundPlayer } from "./SoundPlayer";
 import { installShell } from "./desktop";
 import { astryxMessages, useLang } from "./i18n";
 import { start, useAppState } from "./store";
@@ -41,6 +42,9 @@ installShell();
 // ?theme=dark or ?theme=light forces an appearance, for screenshots.
 const forced = new URLSearchParams(location.search).get("theme");
 
+// ?player draws only the window that shows a notification sound while it plays.
+const player = new URLSearchParams(location.search).has("player");
+
 /** The appearance the settings choose. In the app Go also gives it to the
  * webview, so the title bar and prefers-color-scheme follow; a browser showing
  * the preview only gets it from here. */
@@ -61,7 +65,7 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <Themed>
       <Localized>
-        <App />
+        {player ? <SoundPlayer /> : <App />}
       </Localized>
     </Themed>
   </StrictMode>,

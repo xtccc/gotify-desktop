@@ -25,6 +25,9 @@ type Notification struct {
 	ImagePath string
 	Group     string
 	Level     Level
+	// Sound overrides the sound the settings choose, for previewing a sound
+	// that is not saved yet: see PreviewSound of the API.
+	Sound string
 	// Actions are the notification's buttons.
 	Actions []Action
 }

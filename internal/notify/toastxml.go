@@ -27,13 +27,13 @@ func xmlEscape(s string) string {
 // buildToastXML renders the toast for Windows. Every piece of text is escaped
 // here, since the XML goes straight to the Windows Runtime.
 func buildToastXML(n Notification) string {
-	duration, audio := "short", `<audio src="ms-winsoundevent:Notification.Default" loop="false"/>`
-	switch n.Level {
-	case LevelSilent:
-		audio = `<audio silent="true"/>`
-	case LevelHigh:
-		duration, audio = "long", `<audio src="ms-winsoundevent:Notification.Reminder" loop="false"/>`
+	// Which WAV a toast plays is a setting. The app plays a file itself, so its
+	// toast names a silent audio element instead; see sound.go.
+	duration := "short"
+	if n.Level == LevelHigh {
+		duration = "long"
 	}
+	audio := soundPlanFor(n).Element
 	body := n.Body
 	if n.AppName != "" && n.AppName != n.Title {
 		body = n.AppName + " · " + body

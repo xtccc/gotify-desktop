@@ -53,14 +53,16 @@ func TestToastXMLEscapesAndStripsInvalidChars(t *testing.T) {
 }
 
 func TestToastXMLLevels(t *testing.T) {
-	for level, want := range map[Level][3]string{
-		LevelSilent: {"short", "", "true"},
-		LevelNormal: {"short", "ms-winsoundevent:Notification.Default", ""},
-		LevelHigh:   {"long", "ms-winsoundevent:Notification.Reminder", ""},
-	} {
-		d := parseToast(t, buildToastXML(Notification{ID: "x", Title: "t", Level: level}))
-		if d.Duration != want[0] || d.Audio.Src != want[1] || d.Audio.Silent != want[2] {
+	// The sound of each level is covered by sound_test.go; here only the shape
+	// of the toast matters, and every level names an audio element.
+	for level, want := range map[Level]string{LevelSilent: "short", LevelNormal: "short", LevelHigh: "long"} {
+		s := buildToastXML(Notification{ID: "x", Title: "t", Level: level})
+		d := parseToast(t, s)
+		if d.Duration != want {
 			t.Errorf("level %d: %+v", level, d)
+		}
+		if !strings.Contains(s, "<audio") {
+			t.Errorf("level %d: no audio element\n%s", level, s)
 		}
 		if len(d.Images) != 0 || len(d.Texts) != 1 {
 			t.Errorf("optional parts: %+v", d)

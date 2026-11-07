@@ -8,6 +8,7 @@ import { Section } from "@astryxdesign/core/Section";
 import { Selector } from "@astryxdesign/core/Selector";
 import { Switch } from "@astryxdesign/core/Switch";
 import { Text } from "@astryxdesign/core/Text";
+import { TextInput } from "@astryxdesign/core/TextInput";
 import { TimeInput, type ISOTimeString } from "@astryxdesign/core/TimeInput";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FieldMenu } from "./FieldMenu";
@@ -60,6 +61,56 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
       <Section padding={4} className="settings-group">
         <VStack gap={4}>{children}</VStack>
       </Section>
+    </VStack>
+  );
+}
+
+// The system's own notification sound, for previewing a field left empty.
+const defaultSound = "ms-winsoundevent:Notification.Default";
+
+// SoundField is one notification sound: the file it plays, a picker for it and
+// a preview. The settings save it; the preview plays what the field holds now.
+function SoundField({ label, value, onChange, onError }: { label: string; value: string; onChange(v: string): void; onError(msg: string): void }) {
+  const t = useT();
+  return (
+    <VStack gap={1}>
+      <Text weight="medium">{label}</Text>
+      <HStack gap={2} vAlign="end">
+        <VStack className="grow">
+          <TextInput
+            label={label}
+            isLabelHidden
+            value={value}
+            onChange={onChange}
+            placeholder={t.soundPlaceholder}
+            autoComplete="off"
+            width="100%"
+          />
+        </VStack>
+        <Button
+          label={t.soundChoose}
+          className="no-shrink"
+          clickAction={async () => {
+            try {
+              const path = await Desktop.pickSound();
+              if (path) onChange(path);
+            } catch (err) {
+              onError(errorText(err));
+            }
+          }}
+        />
+        <Button
+          label={t.soundPreview}
+          className="no-shrink"
+          clickAction={async () => {
+            try {
+              await Desktop.previewSound(value.trim() || defaultSound);
+            } catch (err) {
+              onError(t.notificationsUnavailable(errorText(err)));
+            }
+          }}
+        />
+      </HStack>
     </VStack>
   );
 }
@@ -212,6 +263,22 @@ export function SettingsPage({ state, onError }: { state: State; onError(msg: st
                 labelSpacing="spread"
                 width="100%"
                 onChange={(highBypassesDnd) => update({ highBypassesDnd })}
+              />
+              <Divider />
+              <VStack gap={1}>
+                <Text weight="medium">{t.soundTitle}</Text>
+                <Text type="supporting">{t.soundText}</Text>
+              </VStack>
+              <SoundField label={t.soundNormal} value={s.soundNormal} onChange={(soundNormal) => update({ soundNormal })} onError={onError} />
+              <SoundField label={t.soundHigh} value={s.soundHigh} onChange={(soundHigh) => update({ soundHigh })} onError={onError} />
+              <Switch
+                label={t.soundLow}
+                description={t.soundLowText}
+                value={s.soundLowPriority}
+                labelPosition="start"
+                labelSpacing="spread"
+                width="100%"
+                onChange={(soundLowPriority) => update({ soundLowPriority })}
               />
               <Divider />
               <HStack gap={3} vAlign="center">
