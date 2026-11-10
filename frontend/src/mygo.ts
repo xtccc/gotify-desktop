@@ -194,6 +194,11 @@ export interface Settings {
   /** KeepDays is how many days messages are kept here; 0 keeps them forever. */
   keepDays: number;
   /**
+   * SoundEnabled turns every notification sound off when false, whatever the
+   * sounds below are.
+   */
+  soundEnabled: boolean;
+  /**
    * SoundNormal and SoundHigh are the sounds a notification plays: the path
    * of a WAV file, an "ms-winsoundevent:" URI naming one of the system's
    * sounds, or an http(s) URL. "" plays the system's notification sound.

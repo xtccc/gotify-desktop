@@ -163,7 +163,7 @@ func New(opts Options) (*App, error) {
 	a.metadataDirty.Store(true)
 	s := a.loadSettings()
 	a.settings.Store(&s)
-	notify.SetSounds(s.SoundNormal, s.SoundHigh, s.SoundLowPriority)
+	notify.SetSounds(s.SoundNormal, s.SoundHigh, s.SoundLowPriority, s.SoundMuted)
 	a.disp = notify.NewDispatcher(opts.Notifier, st, a.Settings, opts.CacheDir, nil)
 	servers, err := st.Servers()
 	if err != nil {
@@ -952,7 +952,12 @@ func (a *App) SetSettings(s notify.Settings) error {
 		return err
 	}
 	old := a.settings.Swap(&s)
-	notify.SetSounds(s.SoundNormal, s.SoundHigh, s.SoundLowPriority)
+	notify.SetSounds(s.SoundNormal, s.SoundHigh, s.SoundLowPriority, s.SoundMuted)
+	if s.SoundMuted {
+		// The switch is the user asking for quiet now, not from the next
+		// message on.
+		notify.StopSound()
+	}
 	if s.KeepDays != old.KeepDays {
 		select {
 		case a.pruneWake <- struct{}{}:

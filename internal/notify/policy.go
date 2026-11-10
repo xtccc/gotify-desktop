@@ -47,6 +47,10 @@ type Settings struct {
 	// SoundLowPriority plays SoundNormal for the messages of priority 1-3,
 	// which otherwise notify without a sound.
 	SoundLowPriority bool
+	// SoundMuted turns every sound off, whatever the sounds above are. It is
+	// inverted so that the zero value of a settings record saved before the
+	// switch existed still plays them.
+	SoundMuted bool
 }
 
 func DefaultSettings() Settings {

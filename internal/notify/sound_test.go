@@ -10,7 +10,7 @@ import (
 
 // TestMain starts from the sounds of an app that saved none.
 func TestMain(m *testing.M) {
-	SetSounds("", "", false)
+	SetSounds("", "", false, false)
 	os.Exit(m.Run())
 }
 
@@ -18,8 +18,8 @@ func TestMain(m *testing.M) {
 // system's afterwards, so no test sees another's.
 func useSounds(t *testing.T, normal, high string, lowPriority bool) {
 	t.Helper()
-	SetSounds(normal, high, lowPriority)
-	t.Cleanup(func() { SetSounds("", "", false) })
+	SetSounds(normal, high, lowPriority, false)
+	t.Cleanup(func() { SetSounds("", "", false, false) })
 }
 
 // wavHeader is enough of a WAV to be recognised, without 44 bytes of silence in
@@ -126,6 +126,28 @@ func TestToastXMLLowPriorityStaysQuiet(t *testing.T) {
 	useSounds(t, wav(t, "low.wav"), "", false)
 	if p := soundPlanFor(Notification{ID: "x", Level: LevelSilent}); p.File != "" || p.Element != silentAudio {
 		t.Fatalf("%+v", p)
+	}
+}
+
+// The switch of the settings covers every sound: the priorities, the low ones
+// when they are allowed to play, and a preview.
+func TestSoundSwitchSilencesEverything(t *testing.T) {
+	normal, high := wav(t, "normal.wav"), wav(t, "high.wav")
+	SetSounds(normal, high, true, true)
+	t.Cleanup(func() { SetSounds("", "", false, false) })
+	for _, n := range []Notification{
+		{ID: "x", Level: LevelNormal},
+		{ID: "x", Level: LevelHigh},
+		{ID: "x", Level: LevelSilent},
+		{ID: "x", Level: LevelHigh, Sound: normal},
+	} {
+		plan := soundPlanFor(n)
+		if plan.File != "" || plan.Element != silentAudio {
+			t.Fatalf("level %d, sound %q: %+v", n.Level, n.Sound, plan)
+		}
+		if xml := buildToastXML(n); strings.Contains(xml, "file://") || strings.Contains(xml, "ms-winsoundevent") {
+			t.Fatalf("toast of level %d: %s", n.Level, xml)
+		}
 	}
 }
 

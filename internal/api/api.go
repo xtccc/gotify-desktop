@@ -245,6 +245,9 @@ type Settings struct {
 	Theme Theme `json:"theme"`
 	// KeepDays is how many days messages are kept here; 0 keeps them forever.
 	KeepDays int `json:"keepDays"`
+	// SoundEnabled turns every notification sound off when false, whatever the
+	// sounds below are.
+	SoundEnabled bool `json:"soundEnabled"`
 	// SoundNormal and SoundHigh are the sounds a notification plays: the path
 	// of a WAV file, an "ms-winsoundevent:" URI naming one of the system's
 	// sounds, or an http(s) URL. "" plays the system's notification sound.
@@ -509,7 +512,8 @@ func settingsOf(s notify.Settings) Settings {
 	out := Settings{
 		DND: s.DND, DNDStart: s.DNDStart, DNDEnd: s.DNDEnd, HighBypassesDND: s.HighBypassesDND,
 		Language: Language(s.Language), Theme: Theme(s.Theme), KeepDays: s.KeepDays,
-		SoundNormal: s.SoundNormal, SoundHigh: s.SoundHigh, SoundLowPriority: s.SoundLowPriority,
+		SoundEnabled: !s.SoundMuted,
+		SoundNormal:  s.SoundNormal, SoundHigh: s.SoundHigh, SoundLowPriority: s.SoundLowPriority,
 	}
 	if !s.PausedUntil.IsZero() {
 		t := s.PausedUntil
@@ -849,6 +853,7 @@ func (d *Desktop) SetSettings(seq uint64, s Settings) error {
 		cur.Theme = ""
 	}
 	cur.KeepDays = min(max(s.KeepDays, 0), maxKeepDays)
+	cur.SoundMuted = !s.SoundEnabled
 	cur.SoundNormal, cur.SoundHigh = clampSound(s.SoundNormal), clampSound(s.SoundHigh)
 	cur.SoundLowPriority = s.SoundLowPriority
 	cur.PausedUntil = time.Time{}

@@ -29,22 +29,24 @@ var sounds struct {
 	sync.RWMutex
 	normal, high string
 	lowPriority  bool
+	muted        bool
 }
 
 // SetSounds sets the sounds notifications play. The app calls it with its
 // settings, on start and whenever the user changes them.
-func SetSounds(normal, high string, lowPriority bool) {
+func SetSounds(normal, high string, lowPriority, muted bool) {
 	sounds.Lock()
-	sounds.normal, sounds.high, sounds.lowPriority = normal, high, lowPriority
+	sounds.normal, sounds.high, sounds.lowPriority, sounds.muted = normal, high, lowPriority, muted
 	sounds.Unlock()
 }
 
 // configuredSounds are the audio sources of a normal and of a high priority
-// notification, and whether the quiet priorities play one too.
-func configuredSounds() (normal, high string, lowPriority bool) {
+// notification, whether the quiet priorities play one too, and whether the
+// user turned every sound off.
+func configuredSounds() (normal, high string, lowPriority, muted bool) {
 	sounds.RLock()
 	defer sounds.RUnlock()
-	return sounds.normal, sounds.high, sounds.lowPriority
+	return sounds.normal, sounds.high, sounds.lowPriority, sounds.muted
 }
 
 // soundPlan is how a notification makes its noise: the audio element of its
@@ -63,7 +65,13 @@ type soundPlan struct {
 // soundPlanFor is the plan of the sound matched to a message's level, or a
 // silent one.
 func soundPlanFor(n Notification) soundPlan {
-	normal, high, lowPriority := configuredSounds()
+	normal, high, lowPriority, muted := configuredSounds()
+	if muted {
+		// The switch of the settings covers the sounds below, and the preview
+		// too: it exists to turn the app quiet, not one message's way of
+		// being loud.
+		return soundPlan{Element: silentAudio}
+	}
 	if n.Sound != "" {
 		// A preview plays the sound the user is about to save.
 		return planSound(n.Sound, soundDefault)

@@ -70,7 +70,7 @@ const defaultSound = "ms-winsoundevent:Notification.Default";
 
 // SoundField is one notification sound: the file it plays, a picker for it and
 // a preview. The settings save it; the preview plays what the field holds now.
-function SoundField({ label, value, onChange, onError }: { label: string; value: string; onChange(v: string): void; onError(msg: string): void }) {
+function SoundField({ label, value, onChange, onError, isDisabled }: { label: string; value: string; onChange(v: string): void; onError(msg: string): void; isDisabled: boolean }) {
   const t = useT();
   return (
     <VStack gap={1}>
@@ -82,6 +82,7 @@ function SoundField({ label, value, onChange, onError }: { label: string; value:
             isLabelHidden
             value={value}
             onChange={onChange}
+            isDisabled={isDisabled}
             placeholder={t.soundPlaceholder}
             autoComplete="off"
             width="100%"
@@ -90,6 +91,7 @@ function SoundField({ label, value, onChange, onError }: { label: string; value:
         <Button
           label={t.soundChoose}
           className="no-shrink"
+          isDisabled={isDisabled}
           clickAction={async () => {
             try {
               const path = await Desktop.pickSound();
@@ -102,6 +104,7 @@ function SoundField({ label, value, onChange, onError }: { label: string; value:
         <Button
           label={t.soundPreview}
           className="no-shrink"
+          isDisabled={isDisabled}
           clickAction={async () => {
             try {
               await Desktop.previewSound(value.trim() || defaultSound);
@@ -269,12 +272,34 @@ export function SettingsPage({ state, onError }: { state: State; onError(msg: st
                 <Text weight="medium">{t.soundTitle}</Text>
                 <Text type="supporting">{t.soundText}</Text>
               </VStack>
-              <SoundField label={t.soundNormal} value={s.soundNormal} onChange={(soundNormal) => update({ soundNormal })} onError={onError} />
-              <SoundField label={t.soundHigh} value={s.soundHigh} onChange={(soundHigh) => update({ soundHigh })} onError={onError} />
+              <Switch
+                label={t.soundEnabled}
+                description={t.soundEnabledText}
+                value={s.soundEnabled}
+                labelPosition="start"
+                labelSpacing="spread"
+                width="100%"
+                onChange={(soundEnabled) => update({ soundEnabled })}
+              />
+              <SoundField
+                label={t.soundNormal}
+                value={s.soundNormal}
+                isDisabled={!s.soundEnabled}
+                onChange={(soundNormal) => update({ soundNormal })}
+                onError={onError}
+              />
+              <SoundField
+                label={t.soundHigh}
+                value={s.soundHigh}
+                isDisabled={!s.soundEnabled}
+                onChange={(soundHigh) => update({ soundHigh })}
+                onError={onError}
+              />
               <Switch
                 label={t.soundLow}
                 description={t.soundLowText}
                 value={s.soundLowPriority}
+                isDisabled={!s.soundEnabled}
                 labelPosition="start"
                 labelSpacing="spread"
                 width="100%"

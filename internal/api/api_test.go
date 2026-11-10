@@ -299,6 +299,30 @@ func TestSettingsTheme(t *testing.T) {
 	}
 }
 
+// The page has a switch that turns sounds on, so a settings record without one
+// is silent only when the user turns it off.
+func TestSettingsSoundSwitch(t *testing.T) {
+	f := NewFakeBackend()
+	_, d := start(t, f, Platform{})
+	if !d.State().Settings.SoundEnabled {
+		t.Fatal("sounds are on until the switch turns them off")
+	}
+	if err := d.SetSettings(1, Settings{SoundEnabled: false, SoundNormal: "/a.wav"}); err != nil {
+		t.Fatal(err)
+	}
+	got := f.Snapshot().Settings
+	if !got.SoundMuted || got.SoundNormal != "/a.wav" {
+		t.Errorf("a muted setting keeps its sounds: %+v", got)
+	}
+	// A save carries the whole form, so the sound comes back with the switch.
+	if err := d.SetSettings(2, Settings{SoundEnabled: true, SoundNormal: "/a.wav"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.Snapshot().Settings; got.SoundMuted || got.SoundNormal != "/a.wav" {
+		t.Errorf("unmuting: %+v", got)
+	}
+}
+
 func TestOpenURLAllowsOnlyWebAndMail(t *testing.T) {
 	var opened []string
 	_, d := start(t, NewFakeBackend(), Platform{OpenURL: func(u string) { opened = append(opened, u) }})
